@@ -2,18 +2,49 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/sasl/plain"
 )
 
+type UserEvent struct {
+	UserID    string `json:"user_id"`
+	EventType string `json:"event_type"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+func getTLSConfig() *tls.Config {
+	caCert, err := os.ReadFile("secrets/ca-cert.pem")
+	if err != nil {
+		log.Fatal("Failed to read CA certificate:", err)
+	}
+	certPool := x509.NewCertPool()
+	certPool.AppendCertsFromPEM(caCert)
+
+	return &tls.Config{RootCAs: certPool}
+}
+
 func main() {
+	log.Println("Starting auth service...")
+	dialer := &kafka.Dialer{
+		TLS: getTLSConfig(),
+		SASLMechanism: plain.Mechanism{
+			Username: "testuser",
+			Password: "testpassword",
+		},
+	}
+
 	writer := kafka.NewWriter(kafka.WriterConfig{
-		Brokers: []string{"localhost:9092"},
+		Brokers: []string{"kafka:9093"},
 		Topic:   "user-events",
+		Dialer:  dialer,
 	})
 	defer writer.Close()
 
